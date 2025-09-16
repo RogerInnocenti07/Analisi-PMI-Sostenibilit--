@@ -302,9 +302,9 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
     document.addEventListener('DOMContentLoaded', () => { lucide.createIcons(); });
 
-    // ====== CONFIG AI (placeholder) ======
-    const GEMINI_API_KEY = "INSERISCI_LA_TUA_API_KEY_TRAMITE_PROXY"; // NON inserire qui una chiave reale su GitHub Pages
-    const GEMINI_MODEL  = "gemini-2.5-flash-preview-05-20";
+    // ====== URL del PROXY serverless (obbligatorio) ======
+    // Sostituisci con il tuo Worker/Function (es. https://tuo-worker.nome.workers.dev)
+    const GEMINI_PROXY_URL = "INSERISCI_URL_DEL_TUO_PROXY";
 
     // Riferimenti UI
     const uploaderEl = document.getElementById('uploader-section');
@@ -480,16 +480,29 @@
     function formatForDisplay(num) { return (typeof num === 'number' && !isNaN(num)) ? num.toLocaleString('it-IT') : ''; }
     const formatCurrency = val => (typeof val === 'number' && !isNaN(val)) ? val.toLocaleString('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '€ 0';
 
-    // ====== Chiamata (da proteggere con proxy) ======
+    // ====== Chiamata via PROXY (la chiave sta nel serverless) ======
     async function callGeminiProxy(prompt, json=false) {
-      if (!GEMINI_API_KEY || GEMINI_API_KEY.includes("INSERISCI")) {
-        throw new Error("Configura un proxy serverless e la tua API key in modo sicuro.");
+      if (!GEMINI_PROXY_URL || GEMINI_PROXY_URL.includes("INSERISCI_URL_DEL_TUO_PROXY")) {
+        throw new Error("Proxy AI non configurato. Imposta GEMINI_PROXY_URL con l'URL del tuo Worker/Function.");
       }
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-      const payload = { contents: [{ parts: [{ text: String(prompt) }] }], ...(json ? { generationConfig: { responseMimeType: 'application/json' } } : {}) };
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await r.json();
-      if (!r.ok) throw new Error((data && data.error && data.error.message) || r.statusText);
+
+      const r = await fetch(GEMINI_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, json })
+      });
+
+      let data;
+      try {
+        data = await r.json();
+      } catch {
+        throw new Error(`Risposta non valida dal proxy (status ${r.status})`);
+      }
+
+      if (!r.ok || data?.error) {
+        const msg = data?.message || data?.error?.message || JSON.stringify(data);
+        throw new Error(`Errore Proxy/Gemini: ${msg}`);
+      }
       return data;
     }
 
@@ -508,8 +521,8 @@ ${mccText.substring(0, 50000)}
 --- FINE ---`;
 
       const data = await callGeminiProxy(prompt, true);
-      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const cleaned = txt.replace(/```json/g, '').replace(/```/g, '');
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
       return JSON.parse(cleaned);
     }
 
@@ -624,7 +637,7 @@ Restituisci Punti di Forza, Aree di Miglioramento, Azioni Consigliate (in markdo
       const OCF = (dataN.utileNetto || 0) + (dataN.ammortamenti || 0) + (dataN.accantonamenti || 0);
       document.getElementById('val-cassa').textContent     = formatCurrency(OCF);
 
-      analysisDataStore = current; // aggiorna store
+      analysisDataStore = current;
       analysisDataStore.dataN = analysisDataStore.dataN || {};
       analysisDataStore.dataN.OCF = OCF;
 
@@ -825,9 +838,6 @@ Restituisci Punti di Forza, Aree di Miglioramento, Azioni Consigliate (in markdo
   </script>
 </body>
 </html>
-
-
-
 
 
 
